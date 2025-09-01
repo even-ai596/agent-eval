@@ -1,8 +1,8 @@
 import operator
-from typing import Annotated, Dict, Any
+from typing import Annotated, Dict, Any, Literal
 from typing_extensions import TypedDict, List
 from dataclasses import dataclass
-
+from src.elements.pymodels.pymodels import Evaluation
 @dataclass
 class State:
     """Input state for the agent.
@@ -12,6 +12,8 @@ class State:
     """
 
     changeme: str = "example"
-class TestState(TypedDict):
-    changeme: str = ""
-    l = Annotated[List, operator.add]
+class EvaluationState(TypedDict):
+    evaluations: Evaluation
+
+    attribution: str
+    # l = Annotated[List, operator.add]

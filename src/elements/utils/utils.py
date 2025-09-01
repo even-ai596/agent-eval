@@ -3,7 +3,7 @@ import json
 import os
 import sys
 sys.path.append(os.getcwd())
-from src.elements.models.models import client, llm, qwen_llm, chatLLM
+from src.elements.models.models import client, llm
 
 def extract_json(s):
     # 查找第一个左大括号的位置，确保最外层是JSON对象
@@ -158,161 +158,61 @@ async def aget_completion_with_retry(user_prompt, max_retries=10, initial_delay=
     print(f"Failed to get valid JSON after {max_retries} attempts.")
     return None
 
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment
-from typing import List
+import time
+from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup
+import asyncio
 
-from src.elements.pydmodels.pydmodels import GenerateLinguisticData
+from src.elements.utils.utils import *
 
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-from openpyxl.utils import get_column_letter
-
-def save_vocabulary_to_excel(data_list, filename="vocabulary_data.xlsx"):
-    """
-    将词汇数据列表保存到Excel文件的一个工作表中
-    参数:
-        data_list: 包含多个GenerateLinguisticData对象的列表
-        filename: 输出的Excel文件名
-    """
-    # 创建新的工作簿
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "词汇数据"
+async def play_web(search_url: str) -> dict:
     
-    # 设置表头
-    headers = ["词汇种类", "语言", "词性", "难度", "词汇", "句子"]
-    ws.append(headers)
-    
-    # 设置表头样式
-    header_fill = PatternFill(start_color="FFD700", end_color="FFD700", fill_type="solid")
-    bold_font = Font(bold=True)
-    for col in range(1, len(headers)+1):
-        cell = ws.cell(row=1, column=col)
-        cell.font = bold_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center')
-    
-    # 遍历数据并写入Excel
-    row = 2
-    for data_dict in data_list:
-        for category_name, category_data in data_dict.items():
-            for language_data in category_data.generate_linguistic_data:
-                language = language_data.language
-                for vocab_type in language_data.specific_language_vocabularies:
-                    word_type = vocab_type.vocabulary_type
-                    for difficulty in vocab_type.specific_type_vocabularies:
-                        diff_level = difficulty.difficulty
-                        for item in difficulty.specific_difficulty_vocabularies:
-                            # 写入一行数据
-                            ws.cell(row=row, column=1, value=category_name)
-                            ws.cell(row=row, column=2, value=language)
-                            ws.cell(row=row, column=3, value=word_type)
-                            ws.cell(row=row, column=4, value=diff_level)
-                            ws.cell(row=row, column=5, value=item.vocabulary)
-                            ws.cell(row=row, column=6, value=item.sentence)
-                            row += 1
-    
-    # 设置自动列宽
-    for col in ws.columns:
-        max_length = 0
-        column = get_column_letter(col[0].column)
-        for cell in col:
+        
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=False,  # 设为False便于调试
+                timeout=60000,
+                args=['--start-maximized']
+            )
+            context = await browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            )
+            page = await context.new_page()
             try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
-        adjusted_width = (max_length + 2) * 1.2
-        ws.column_dimensions[column].width = adjusted_width
-    
-    # 冻结首行
-    ws.freeze_panes = "A2"
-    
-    # 保存文件
-    wb.save(filename)
-    print(f"数据已成功保存到 {filename}")
-    
-    
-    
-import os
-import requests
-from pathlib import Path
-from datetime import datetime, timedelta
-
-def get_upload_policy(api_key, model_name):
-    """获取文件上传凭证"""
-    url = "https://dashscope.aliyuncs.com/api/v1/uploads"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    params = {
-        "action": "getPolicy",
-        "model": model_name
-    }
-    
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        raise Exception(f"Failed to get upload policy: {response.text}")
-    
-    return response.json()['data']
-
-def upload_file_to_oss(policy_data, file_path):
-    """将文件上传到临时存储OSS"""
-    file_name = Path(file_path).name
-    key = f"{policy_data['upload_dir']}/{file_name}"
-    
-    with open(file_path, 'rb') as file:
-        files = {
-            'OSSAccessKeyId': (None, policy_data['oss_access_key_id']),
-            'Signature': (None, policy_data['signature']),
-            'policy': (None, policy_data['policy']),
-            'x-oss-object-acl': (None, policy_data['x_oss_object_acl']),
-            'x-oss-forbid-overwrite': (None, policy_data['x_oss_forbid_overwrite']),
-            'key': (None, key),
-            'success_action_status': (None, '200'),
-            'file': (file_name, file)
-        }
+                # ========== 普通检索 ==========
+                for i in range(10):
+                    
+                    try:
+                        await page.goto(search_url, timeout=3000)
+                        break
+                        
+                    except:
+                        time.sleep(1)
+                await asyncio.sleep(30)
+                await page.screenshot(path='debug.png')
+                
+                # Get the page content and parse with BeautifulSoup
+                html_content = await page.content()
+                
+                soup = BeautifulSoup(html_content, 'html.parser')
+                                # Find and click the login button
+                
+                
+                                    
+                        
+                
+                            
+            
+            finally:
+                await browser.close()
         
-        response = requests.post(policy_data['upload_host'], files=files)
-        if response.status_code != 200:
-            raise Exception(f"Failed to upload file: {response.text}")
-    
-    return f"oss://{key}"
-
-def upload_file_and_get_url(api_key, model_name, file_path):
-    """上传文件并获取公网URL"""
-    # 1. 获取上传凭证
-    policy_data = get_upload_policy(api_key, model_name) 
-    # 2. 上传文件到OSS
-    oss_url = upload_file_to_oss(policy_data, file_path)
-    
-    return oss_url
-
-# 使用示例
-# if __name__ == "__main__":
-    
-#     # 从环境变量中获取API Key 或者 在代码中设置 api_key = "your_api_key"
-#     api_key = os.getenv("DASHSCOPE_API_KEY")
-#     if not api_key:
-#         raise Exception("请设置DASHSCOPE_API_KEY环境变量")
-        
-#     # 设置model名称
-#     model_name="qwen-vl-plus"
-
-#     # 待上传的文件路径
-#     file_path = "4ba4eef6-6a9b-40ad-932e-8648e4ff6ced-1.png"  # 替换为实际文件路径
-    
-#     try:
-#         public_url = upload_file_and_get_url(api_key, model_name, file_path)
-#         expire_time = datetime.now() + timedelta(hours=48)
-#         print(f"文件上传成功，有效期为48小时，过期时间: {expire_time.strftime('%Y-%m-%d %H:%M:%S')}")
-#         print(f"公网URL: {public_url}")
-
-#     except Exception as e:
-#         print(f"Error: {str(e)}")
-        
+        return {"status": "success", "message": "Login button clicked"}
+if __name__ == "__main__":
+    asyncio.run(play_web("http://observe.dibrain.data-infra.shopee.io/project/clwt91c5l0001jlxd484nmens/traces/364dd0a0-4e11-45af-bac7-70c822577f1c"))
+    print("done")
+    exit()
 if __name__ == "__main__":
     s = """{
   "RequestId": "A3D6F5CB-7548-538B-9504-4A8DBC09784D",
